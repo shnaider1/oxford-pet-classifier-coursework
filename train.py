@@ -73,7 +73,7 @@ transform = transforms.Compose([
 train_data = datasets.OxfordIIITPet(
     root="data",
     split="trainval",
-    target_types="category",
+    target_types=("category", "segmentation"),
     download=True,
     transform=transform
 )
@@ -89,8 +89,11 @@ for epoch in range(5):
     correct = 0
     total = 0
 
-    for images, labels in train_loader:
-        images, labels = images.to(device), labels.to(device)
+    for images, targets in train_loader:
+        labels, trimaps = targets
+
+        images = images.to(device)
+        labels = labels.to(device)
 
         optimizer.zero_grad()
 
@@ -105,8 +108,6 @@ for epoch in range(5):
 
     print(f"Epoch {epoch + 1}: accuracy = {100 * correct / total:.2f}%")
 
-torch.save(model.state_dict(), "model.pth")
-print("Saved model to model.pth")
-
-    
-
+    torch.save(model.state_dict(), f"model_epoch_{epoch + 1:02d}.pth")
+    torch.save(model.state_dict(), "model.pth")
+    print(f"Saved checkpoint for epoch {epoch + 1}")
