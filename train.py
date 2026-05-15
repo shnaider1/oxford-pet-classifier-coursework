@@ -78,3 +78,4 @@ for epoch in range(5):
     print(f"Epoch {epoch + 1}: accuracy = {100 * correct / total:.2f}%")
 
 torch.save(model.state_dict(), "model.pth")
+print("Saved model to model.pth")
