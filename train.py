@@ -1,9 +1,13 @@
 # train.py
 
+import numpy as np
+from PIL import Image
+
 import torch
 from torch import nn, optim
-from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
+from torch.utils.data import DataLoader, Dataset
+from torchvision import datasets
+import torchvision.transforms.functional as TF
 
 
 class BasicBlock(nn.Module):
@@ -62,20 +66,48 @@ class PetCNN(nn.Module):
         return x
 
 
+def grey_background(image, trimap, background_value=128):
+    image = image.convert("RGB")
+
+    image_array = np.array(image).copy()
+    trimap_array = np.array(trimap)
+
+    background = trimap_array == 2
+    image_array[background] = background_value
+
+    return Image.fromarray(image_array)
+
+
+class PetTrimapDataset(Dataset):
+    def __init__(self, root, split, download=True):
+        self.dataset = datasets.OxfordIIITPet(
+            root=root,
+            split=split,
+            target_types=("category", "segmentation"),
+            download=download
+        )
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        image, target = self.dataset[index]
+        label, trimap = target
+
+        image = grey_background(image, trimap)
+        image = TF.resize(image, (224, 224))
+        image = TF.to_tensor(image)
+
+        return image, label
+
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor()
-])
-
-train_data = datasets.OxfordIIITPet(
+train_data = PetTrimapDataset(
     root="data",
     split="trainval",
-    target_types=("category", "segmentation"),
-    download=True,
-    transform=transform
+    download=True
 )
 
 train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
@@ -89,9 +121,7 @@ for epoch in range(5):
     correct = 0
     total = 0
 
-    for images, targets in train_loader:
-        labels, trimaps = targets
-
+    for images, labels in train_loader:
         images = images.to(device)
         labels = labels.to(device)
 
