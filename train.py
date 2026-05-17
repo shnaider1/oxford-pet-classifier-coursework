@@ -36,7 +36,7 @@ class PetCNN(nn.Module):
         super().__init__()
 
         self.features = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, padding=1),
+            nn.Conv2d(4, 32, kernel_size=3, padding=1),
             nn.ReLU(),
             BasicBlock(32),
             nn.MaxPool2d(2),
@@ -66,16 +66,24 @@ class PetCNN(nn.Module):
         return x
 
 
-def grey_background(image, trimap, background_value=128):
+def make_grey_image_and_mask(image, trimap, background_value=128):
     image = image.convert("RGB")
 
     image_array = np.array(image).copy()
     trimap_array = np.array(trimap)
 
-    background = trimap_array == 2
-    image_array[background] = background_value
+    pet_mask = trimap_array != 2
+    background_mask = trimap_array == 2
 
-    return Image.fromarray(image_array)
+    image_array[background_mask] = background_value
+
+    mask_array = np.zeros(trimap_array.shape, dtype=np.uint8)
+    mask_array[pet_mask] = 255
+
+    grey_image = Image.fromarray(image_array)
+    mask_image = Image.fromarray(mask_array)
+
+    return grey_image, mask_image
 
 
 class PetTrimapDataset(Dataset):
@@ -94,11 +102,21 @@ class PetTrimapDataset(Dataset):
         image, target = self.dataset[index]
         label, trimap = target
 
-        image = grey_background(image, trimap)
-        image = TF.resize(image, (224, 224))
-        image = TF.to_tensor(image)
+        image, mask = make_grey_image_and_mask(image, trimap)
 
-        return image, label
+        image = TF.resize(image, (224, 224))
+        mask = TF.resize(
+            mask,
+            (224, 224),
+            interpolation=TF.InterpolationMode.NEAREST
+        )
+
+        image_tensor = TF.to_tensor(image)
+        mask_tensor = TF.to_tensor(mask)
+
+        input_tensor = torch.cat([image_tensor, mask_tensor], dim=0)
+
+        return input_tensor, label
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
